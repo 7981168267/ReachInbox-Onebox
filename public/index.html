@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReachInbox Onebox - AI Email Management</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .controls {
+            padding: 20px;
+            background: white;
+            border-bottom: 1px solid #eee;
+        }
+
+        .search-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .search-bar input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+
+        .search-bar button {
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .filters {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .filter-group label {
+            font-weight: 500;
+            color: #555;
+        }
+
+        .filter-group select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            min-width: 150px;
+        }
+
+        .email-list {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .email-item {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .email-item:hover {
+            background-color: #f8f9fa;
+        }
+
+        .email-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+
+        .email-subject {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .email-from {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .email-meta {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .email-date {
+            color: #888;
+            font-size: 0.9em;
+        }
+
+        .ai-category {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .category-interested { background: #d4edda; color: #155724; }
+        .category-meeting-booked { background: #cce5ff; color: #004085; }
+        .category-not-interested { background: #f8d7da; color: #721c24; }
+        .category-spam { background: #f5f5f5; color: #6c757d; }
+        .category-out-of-office { background: #fff3cd; color: #856404; }
+
+        .email-preview {
+            color: #666;
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+
+        .email-actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary { background: #667eea; color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            margin: 20px;
+            border-radius: 6px;
+            border: 1px solid #f5c6cb;
+        }
+
+        .suggested-reply {
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 10px;
+        }
+
+        .suggested-reply h4 {
+            color: #004085;
+            margin-bottom: 10px;
+        }
+
+        .suggested-reply textarea {
+            width: 100%;
+            min-height: 100px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: inherit;
+            resize: vertical;
+        }
+
+        @media (max-width: 768px) {
+            .stats {
+                grid-template-columns: 1fr 1fr;
+            }
+            
+            .filters {
+                flex-direction: column;
+            }
+            
+            .email-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 ReachInbox Onebox</h1>
+            <p>AI-Powered Email Management & Lead Generation</p>
+        </div>
+
+        <div class="stats" id="stats">
+            <div class="stat-card">
+                <div class="stat-number" id="totalEmails">-</div>
+                <div>Total Emails</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="interestedLeads">-</div>
+                <div>Interested Leads</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="meetingsBooked">-</div>
+                <div>Meetings Booked</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="connectedAccounts">-</div>
+                <div>Connected Accounts</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="search-bar">
+                <input type="text" id="searchInput" placeholder="Search emails...">
+                <button onclick="searchEmails()">Search</button>
+            </div>
+
+            <div class="filters">
+                <div class="filter-group">
+                    <label>Category</label>
+                    <select id="categoryFilter" onchange="filterEmails()">
+                        <option value="">All Categories</option>
+                        <option value="Interested">Interested</option>
+                        <option value="Meeting Booked">Meeting Booked</option>
+                        <option value="Not Interested">Not Interested</option>
+                        <option value="Spam">Spam</option>
+                        <option value="Out of Office">Out of Office</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label>Account</label>
+                    <select id="accountFilter" onchange="filterEmails()">
+                        <option value="">All Accounts</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label>Folder</label>
+                    <select id="folderFilter" onchange="filterEmails()">
+                        <option value="">All Folders</option>
+                        <option value="INBOX">INBOX</option>
+                        <option value="Sent">Sent</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div id="emailList" class="email-list">
+            <div class="loading">Loading emails...</div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3000/api';
+
+        // Load initial data
+        document.addEventListener('DOMContentLoaded', function() {
+            loadStats();
+            loadAccounts();
+            loadEmails();
+        });
+
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_BASE}/status`);
+                const data = await response.json();
+                
+                if (data.stats) {
+                    document.getElementById('totalEmails').textContent = data.stats.totalEmails || 0;
+                    document.getElementById('connectedAccounts').textContent = `${data.stats.connectedAccounts}/${data.stats.totalAccounts}`;
+                    
+                    // Find interested and meeting booked counts
+                    const interested = data.stats.categoryStats?.find(c => c.category === 'Interested')?.count || 0;
+                    const meetings = data.stats.categoryStats?.find(c => c.category === 'Meeting Booked')?.count || 0;
+                    
+                    document.getElementById('interestedLeads').textContent = interested;
+                    document.getElementById('meetingsBooked').textContent = meetings;
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        async function loadAccounts() {
+            try {
+                const response = await fetch(`${API_BASE}/emails/accounts/list`);
+                const accounts = await response.json();
+                
+                const accountSelect = document.getElementById('accountFilter');
+                accounts.forEach(account => {
+                    const option = document.createElement('option');
+                    option.value = account.accountId;
+                    option.textContent = `${account.accountId} ${account.isConnected ? '🟢' : '🔴'}`;
+                    accountSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading accounts:', error);
+            }
+        }
+
+        async function loadEmails() {
+            try {
+                const response = await fetch(`${API_BASE}/emails`);
+                const data = await response.json();
+                displayEmails(data.emails || []);
+            } catch (error) {
+                console.error('Error loading emails:', error);
+                document.getElementById('emailList').innerHTML = '<div class="error">Error loading emails. Please check if the server is running.</div>';
+            }
+        }
+
+        function displayEmails(emails) {
+            const emailList = document.getElementById('emailList');
+            
+            if (emails.length === 0) {
+                emailList.innerHTML = '<div class="loading">No emails found.</div>';
+                return;
+            }
+
+            emailList.innerHTML = emails.map(email => `
+                <div class="email-item" onclick="showEmailDetails('${email.id}')">
+                    <div class="email-header">
+                        <div>
+                            <div class="email-subject">${email.subject || 'No Subject'}</div>
+                            <div class="email-from">From: ${email.from || 'Unknown'}</div>
+                        </div>
+                        <div class="ai-category category-${email.aiCategory?.toLowerCase().replace(' ', '-')}">
+                            ${email.aiCategory || 'Uncategorized'}
+                        </div>
+                    </div>
+                    <div class="email-meta">
+                        <span class="email-date">${new Date(email.date).toLocaleString()}</span>
+                        <span>Account: ${email.accountId}</span>
+                        <span>Folder: ${email.folder}</span>
+                    </div>
+                    <div class="email-preview">
+                        ${email.body ? email.body.substring(0, 150) + '...' : 'No content'}
+                    </div>
+                    <div class="email-actions">
+                        <button class="btn btn-primary" onclick="event.stopPropagation(); suggestReply('${email.id}')">
+                            💬 Suggest Reply
+                        </button>
+                        <button class="btn btn-secondary" onclick="event.stopPropagation(); categorizeEmail('${email.id}')">
+                            🤖 Re-categorize
+                        </button>
+                    </div>
+                    <div id="suggested-reply-${email.id}" class="suggested-reply" style="display: none;"></div>
+                </div>
+            `).join('');
+        }
+
+        async function searchEmails() {
+            const query = document.getElementById('searchInput').value;
+            const category = document.getElementById('categoryFilter').value;
+            const account = document.getElementById('accountFilter').value;
+            const folder = document.getElementById('folderFilter').value;
+
+            try {
+                let url = `${API_BASE}/emails/search?q=${encodeURIComponent(query)}`;
+                if (category) url += `&category=${encodeURIComponent(category)}`;
+                if (account) url += `&account=${encodeURIComponent(account)}`;
+                if (folder) url += `&folder=${encodeURIComponent(folder)}`;
+
+                console.log('Searching with URL:', url);
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Search results:', data);
+                displayEmails(data.emails || []);
+            } catch (error) {
+                console.error('Error searching emails:', error);
+                document.getElementById('emailList').innerHTML = '<div class="error">Error searching emails. Please check console for details.</div>';
+            }
+        }
+
+        function filterEmails() {
+            searchEmails();
+        }
+
+        async function suggestReply(emailId) {
+            const replyDiv = document.getElementById(`suggested-reply-${emailId}`);
+            
+            if (replyDiv.style.display === 'none') {
+                replyDiv.innerHTML = '<h4>Generating suggested reply...</h4>';
+                replyDiv.style.display = 'block';
+                
+                try {
+                    console.log('Generating reply for email:', emailId);
+                    const response = await fetch(`${API_BASE}/emails/${emailId}/suggest-reply`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ context: 'Generate a professional reply' })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('Reply generated:', data);
+                    replyDiv.innerHTML = `
+                        <h4>💡 Suggested Reply</h4>
+                        <textarea readonly>${data.suggestedReply || 'No reply generated'}</textarea>
+                    `;
+                } catch (error) {
+                    replyDiv.innerHTML = '<h4>❌ Error generating reply</h4>';
+                    console.error('Error generating reply:', error);
+                }
+            } else {
+                replyDiv.style.display = 'none';
+            }
+        }
+
+        async function categorizeEmail(emailId) {
+            try {
+                console.log('Re-categorizing email:', emailId);
+                const response = await fetch(`${API_BASE}/emails/categorize`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ emailIds: [emailId] })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Categorization result:', data);
+                if (data.results && data.results[0]) {
+                    alert(`Email re-categorized as: ${data.results[0].category}`);
+                    loadEmails(); // Refresh the list
+                    loadStats(); // Refresh stats
+                }
+            } catch (error) {
+                console.error('Error categorizing email:', error);
+                alert('Error re-categorizing email');
+            }
+        }
+
+        function showEmailDetails(emailId) {
+            // This could be expanded to show full email details in a modal
+            console.log('Show details for email:', emailId);
+        }
+
+        // Auto-refresh stats every 30 seconds
+        setInterval(loadStats, 30000);
+    </script>
+</body>
+</html>
