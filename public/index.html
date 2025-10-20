@@ -339,8 +339,10 @@
 
         async function loadStats() {
             try {
+                console.log('Loading stats from:', `${API_BASE}/status`);
                 const response = await fetch(`${API_BASE}/status`);
                 const data = await response.json();
+                console.log('Stats data received:', data);
                 
                 if (data.stats) {
                     document.getElementById('totalEmails').textContent = data.stats.totalEmails || 0;
@@ -352,6 +354,15 @@
                     
                     document.getElementById('interestedLeads').textContent = interested;
                     document.getElementById('meetingsBooked').textContent = meetings;
+                    
+                    console.log('Stats updated:', {
+                        totalEmails: data.stats.totalEmails,
+                        interested: interested,
+                        meetings: meetings,
+                        connectedAccounts: data.stats.connectedAccounts
+                    });
+                } else {
+                    console.log('No stats data found in response');
                 }
             } catch (error) {
                 console.error('Error loading stats:', error);
@@ -377,8 +388,10 @@
 
         async function loadEmails() {
             try {
+                console.log('Loading emails from:', `${API_BASE}/emails`);
                 const response = await fetch(`${API_BASE}/emails`);
                 const data = await response.json();
+                console.log('Emails data received:', data);
                 displayEmails(data.emails || []);
             } catch (error) {
                 console.error('Error loading emails:', error);
