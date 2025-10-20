@@ -1,135 +1,237 @@
-// AI email categorization using Gemini API
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { config } from '../config';
-import { logger } from '../utils/logger';
-import { EmailDocument } from '../imap/imapClient';
+
+export interface EmailCategorization {
+  category: 'Interested' | 'Meeting Booked' | 'Not Interested' | 'Spam' | 'Out of Office' | 'Uncategorized';
+  confidence: number;
+  reasoning?: string;
+}
 
 export class AiCategorizer {
   private genAI: GoogleGenerativeAI;
   private model: any;
 
   constructor() {
-    this.genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY);
-    this.model = this.genAI.getGenerativeModel({ model: 'gemini-pro' });
+    const apiKey = process.env.GEMINI_API_KEY;
+    
+    if (!apiKey) {
+      console.log('⚠️ GEMINI_API_KEY not found, using mock categorization');
+      this.genAI = null as any;
+      this.model = null;
+    } else {
+      this.genAI = new GoogleGenerativeAI(apiKey);
+      this.model = this.genAI.getGenerativeModel({ 
+        model: "gemini-pro",
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "object",
+            properties: {
+              category: {
+                type: "string",
+                enum: ["Interested", "Meeting Booked", "Not Interested", "Spam", "Out of Office", "Uncategorized"]
+              },
+              confidence: {
+                type: "number",
+                minimum: 0,
+                maximum: 1
+              },
+              reasoning: {
+                type: "string"
+              }
+            },
+            required: ["category", "confidence"]
+          }
+        }
+      });
+    }
   }
 
-  async categorizeEmail(email: EmailDocument): Promise<string> {
-    try {
-      if (!config.GEMINI_API_KEY) {
-        logger.warn('Gemini API key not configured, using fallback categorization');
-        return this.fallbackCategorization(email);
-      }
+  async categorizeEmail(email: {
+    subject: string;
+    body: string;
+    from: string;
+    to: string[];
+  }): Promise<EmailCategorization> {
+    if (!this.model) {
+      return this.mockCategorization(email);
+    }
 
+    try {
       const prompt = this.buildCategorizationPrompt(email);
-      
       const result = await this.model.generateContent(prompt);
       const response = await result.response;
-      const category = response.text().trim();
-
-      const validCategory = this.validateCategory(category);
-      if (validCategory) {
-        logger.debug(`Email categorized as: ${validCategory}`);
-        return validCategory;
-      } else {
-        logger.warn(`Invalid category received: ${category}, using fallback`);
-        return this.fallbackCategorization(email);
-      }
+      const text = response.text();
+      
+      const categorization = JSON.parse(text);
+      
+      return {
+        category: categorization.category,
+        confidence: categorization.confidence || 0.8,
+        reasoning: categorization.reasoning
+      };
     } catch (error) {
-      logger.error('Error categorizing email with AI:', error);
+      console.error('AI categorization failed, using fallback:', error);
       return this.fallbackCategorization(email);
     }
   }
 
-  private buildCategorizationPrompt(email: EmailDocument): string {
+  private buildCategorizationPrompt(email: {
+    subject: string;
+    body: string;
+    from: string;
+    to: string[];
+  }): string {
     return `
-You are an expert email classifier for a sales outreach platform. Analyze the provided email and categorize it into exactly ONE of these categories:
+You are an expert email classifier for a sales and lead generation platform. Analyze the following email and categorize it into one of these categories:
 
-1. "Interested" - The recipient shows interest in the product/service, asks questions, or wants to learn more
-2. "Meeting Booked" - The recipient has scheduled or confirmed a meeting/call
-3. "Not Interested" - The recipient explicitly states they are not interested or declines the offer
-4. "Spam" - Unwanted promotional emails, newsletters, or irrelevant content
-5. "Out of Office" - Automated out-of-office replies or vacation responses
+**Categories:**
+- **Interested**: Shows genuine interest in products/services, requests for demos, pricing, or more information
+- **Meeting Booked**: Confirms meetings, appointments, or scheduled calls
+- **Not Interested**: Explicitly declines, says no, or asks to be removed from lists
+- **Spam**: Unwanted promotional content, newsletters, or irrelevant messages
+- **Out of Office**: Auto-replies, vacation notices, or unavailability messages
+- **Uncategorized**: Doesn't clearly fit any other category
 
-Email Details:
-Subject: ${email.subject || 'No subject'}
-From: ${email.from || 'Unknown sender'}
-Body: ${this.truncateText(email.body || '', 800)}
+**Email to analyze:**
+Subject: ${email.subject}
+From: ${email.from}
+To: ${email.to.join(', ')}
+Body: ${email.body}
 
-Instructions:
-- Return ONLY the category name (exactly as written above)
-- Be precise and conservative in your classification
-- If uncertain, choose the most appropriate category based on the email content
+**Instructions:**
+1. Analyze the email content, tone, and intent
+2. Consider the sender's relationship and context
+3. Look for keywords that indicate interest, meeting confirmation, rejection, etc.
+4. Provide a confidence score (0-1) based on how clear the categorization is
+5. Give brief reasoning for your decision
 
-Category:`;
+Respond with JSON format containing category, confidence, and reasoning.
+    `.trim();
   }
 
-  private fallbackCategorization(email: EmailDocument): string {
-    const subject = (email.subject || '').toLowerCase();
-    const from = (email.from || '').toLowerCase();
-    const body = (email.body || '').toLowerCase();
+  private mockCategorization(email: {
+    subject: string;
+    body: string;
+    from: string;
+  }): EmailCategorization {
+    const subject = email.subject.toLowerCase();
+    const body = email.body.toLowerCase();
+    const from = email.from.toLowerCase();
 
-    // Simple rule-based categorization for the 5 required categories
-    if (subject.includes('out of office') || subject.includes('auto-reply') || 
-        subject.includes('vacation') || body.includes('out of office')) {
-      return 'Out of Office';
+    // Mock categorization logic
+    if (subject.includes('interested') || body.includes('demo') || body.includes('pricing')) {
+      return {
+        category: 'Interested',
+        confidence: 0.9,
+        reasoning: 'Contains interest indicators like "demo" or "pricing"'
+      };
     }
 
-    if (subject.includes('unsubscribe') || from.includes('noreply') || 
-        subject.includes('newsletter') || body.includes('unsubscribe')) {
-      return 'Spam';
+    if (subject.includes('meeting') || subject.includes('call') || body.includes('schedule')) {
+      return {
+        category: 'Meeting Booked',
+        confidence: 0.85,
+        reasoning: 'Contains meeting or scheduling keywords'
+      };
     }
 
-    if (subject.includes('not interested') || body.includes('not interested') ||
-        body.includes('decline') || body.includes('pass')) {
-      return 'Not Interested';
+    if (subject.includes('not interested') || body.includes('remove') || body.includes('unsubscribe')) {
+      return {
+        category: 'Not Interested',
+        confidence: 0.9,
+        reasoning: 'Contains rejection or removal requests'
+      };
     }
 
-    if (subject.includes('meeting') || subject.includes('call') || 
-        subject.includes('schedule') || body.includes('calendar')) {
-      return 'Meeting Booked';
+    if (subject.includes('newsletter') || from.includes('noreply') || body.includes('unsubscribe')) {
+      return {
+        category: 'Spam',
+        confidence: 0.8,
+        reasoning: 'Appears to be promotional or automated content'
+      };
     }
 
-    if (body.includes('interested') || body.includes('more information') ||
-        body.includes('tell me more') || body.includes('?')) {
-      return 'Interested';
+    if (subject.includes('out of office') || body.includes('vacation') || body.includes('unavailable')) {
+      return {
+        category: 'Out of Office',
+        confidence: 0.9,
+        reasoning: 'Contains out-of-office indicators'
+      };
     }
 
-    return 'Spam'; // Default fallback
+    return {
+      category: 'Uncategorized',
+      confidence: 0.6,
+      reasoning: 'No clear categorization indicators found'
+    };
   }
 
-  private validateCategory(category: string | undefined): string | null {
-    const validCategories = config.AI_CATEGORIES;
+  private fallbackCategorization(email: {
+    subject: string;
+    body: string;
+    from: string;
+  }): EmailCategorization {
+    // Simple keyword-based fallback
+    const text = `${email.subject} ${email.body}`.toLowerCase();
 
-    if (category && validCategories.includes(category as any)) {
-      return category;
+    if (text.includes('interested') || text.includes('demo') || text.includes('pricing')) {
+      return { category: 'Interested', confidence: 0.7 };
     }
 
-    return null;
+    if (text.includes('meeting') || text.includes('call') || text.includes('schedule')) {
+      return { category: 'Meeting Booked', confidence: 0.7 };
+    }
+
+    if (text.includes('not interested') || text.includes('remove')) {
+      return { category: 'Not Interested', confidence: 0.7 };
+    }
+
+    if (text.includes('newsletter') || text.includes('unsubscribe')) {
+      return { category: 'Spam', confidence: 0.7 };
+    }
+
+    if (text.includes('out of office') || text.includes('vacation')) {
+      return { category: 'Out of Office', confidence: 0.7 };
+    }
+
+    return { category: 'Uncategorized', confidence: 0.5 };
   }
 
-  private truncateText(text: string, maxLength: number): string {
-    if (text.length <= maxLength) {
-      return text;
+  async batchCategorizeEmails(emails: Array<{
+    id: string;
+    subject: string;
+    body: string;
+    from: string;
+    to: string[];
+  }>): Promise<Array<{ id: string; category: string; confidence: number }>> {
+    const results = [];
+
+    for (const email of emails) {
+      try {
+        const categorization = await this.categorizeEmail(email);
+        results.push({
+          id: email.id,
+          category: categorization.category,
+          confidence: categorization.confidence
+        });
+      } catch (error) {
+        console.error(`Failed to categorize email ${email.id}:`, error);
+        results.push({
+          id: email.id,
+          category: 'Uncategorized',
+          confidence: 0.5
+        });
+      }
     }
-    return text.substring(0, maxLength) + '...';
+
+    return results;
   }
 
-  async batchCategorizeEmails(emails: EmailDocument[]): Promise<Array<{ email: EmailDocument; category: string }>> {
-    try {
-      const results = await Promise.all(
-        emails.map(async (email) => {
-          const category = await this.categorizeEmail(email);
-          return { email, category };
-        })
-      );
-
-      logger.info(`Categorized ${emails.length} emails`);
-      return results;
-    } catch (error) {
-      logger.error('Error batch categorizing emails:', error);
-      throw error;
-    }
+  validateCategory(category: string): boolean {
+    const validCategories = [
+      'Interested', 'Meeting Booked', 'Not Interested', 
+      'Spam', 'Out of Office', 'Uncategorized'
+    ];
+    return validCategories.includes(category);
   }
 }
-
-export const aiCategorizer = new AiCategorizer();
